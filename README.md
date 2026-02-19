@@ -108,49 +108,7 @@ Playbook автоматизирует установку и настройку �
 
 **<mark>Структура проекта</mark>**
 
-[vgorshkov@gid-000455 ansible-dz03]$ tree
-`
-.
-├── group_vars
-
-│   ├── clickhouse
-
-│   │   └── vars.yml
-
-│   ├── lighthouse
-
-│   │   └── vars.yml
-
-│   └── vector
-
-│       └── vars.yml
-
-├── image-N.png
-
-├── image-..png
-
-├── image-2.png
-
-├── image-1.png
-
-├── image.png
-
-├── inventory
-
-│   └── prod.yml
-
-├── README.md
-
-├── requirements.yml
-
-├── site.yml
-
-└── templates
-
-    └── lighthouse_nginx.conf.j2
-`
-
-6 directories, 29 files
+![alt text](image-21.png)
 
 `site.yml` - основной playbook
 
