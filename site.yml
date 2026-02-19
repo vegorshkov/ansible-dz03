@@ -1,0 +1,100 @@
+---
+- name: Install Clickhouse
+  hosts: clickhouse
+  handlers:
+    - name: Start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: restarted
+  tasks:
+    - name: Download Clickhouse packages  # добавил имя таски
+      block:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
+            dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
+            mode: '0644'  # добавил права
+          with_items: "{{ clickhouse_packages }}"
+      rescue:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://packages.clickhouse.com/rpm/stable/clickhouse-common-static-{{ clickhouse_version }}.x86_64.rpm"
+            dest: "./clickhouse-common-static-{{ clickhouse_version }}.rpm"
+            mode: '0644'  # добавил права
+    - name: Install clickhouse packages
+      become: true
+      ansible.builtin.yum:
+        name:
+          - clickhouse-common-static-{{ clickhouse_version }}.rpm
+          - clickhouse-client-{{ clickhouse_version }}.rpm
+          - clickhouse-server-{{ clickhouse_version }}.rpm
+      notify: Start clickhouse service
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers
+    - name: Create database
+      ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
+      register: create_db
+      failed_when: create_db.rc != 0 and create_db.rc != 82
+      changed_when: create_db.rc == 0
+
+- name: Install Vector
+  hosts: vector
+  vars_files:
+    - group_vars/vector/vars.yml
+  handlers:
+    - name: Start vector service
+      become: true
+      ansible.builtin.service:
+        name: vector
+        state: restarted
+  tasks:
+    - name: Get vector distrib
+      ansible.builtin.get_url:
+        url: "https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-1.x86_64.rpm"
+        dest: "/home/centos/vector-{{ vector_version }}.rpm"
+        mode: '0644' # добавил права
+      register: download_result
+    - name: Debug - show download result
+      ansible.builtin.debug:
+        var: download_result
+    - name: Debug - check if file exists with stat
+      ansible.builtin.stat:
+        path: "/home/centos/vector-{{ vector_version }}.rpm"
+      register: file_stat
+    - name: Debug - show file stat
+      ansible.builtin.debug:
+        var: file_stat
+    - name: Debug - list home directory
+      ansible.builtin.command: ls -la /home/centos/
+      register: home_list
+      changed_when: false
+      become: true
+    - name: Debug - show home directory contents
+      ansible.builtin.debug:
+        var: home_list.stdout_lines
+    - name: Debug - check current user
+      changed_when: false
+      ansible.builtin.command: whoami
+      register: whoami_result
+      become: true
+    - name: Debug - show current user
+      ansible.builtin.debug:
+        var: whoami_result.stdout
+    - name: Debug - check pwd
+      ansible.builtin.command: pwd
+      register: pwd_result
+      changed_when: false
+      become: true
+    - name: Debug - show current directory
+      ansible.builtin.debug:
+        var: pwd_result.stdout
+    - name: Install vector package
+      become: true
+      ansible.builtin.yum:
+        name: "/home/centos/vector-{{ vector_version }}.rpm"
+        state: present
+      notify: Start vector service
+      when: file_stat.stat.exists  # Установка только если файл существует
+    - name: Flush handlers
+      ansible.builtin.meta: flush_handlers

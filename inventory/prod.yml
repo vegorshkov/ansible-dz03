@@ -1,0 +1,14 @@
+---
+clickhouse:
+  hosts:
+    clickhouse-01:
+      ansible_host: 93.77.191.89
+      ansible_user: centos
+      ansible_ssh_private_key_file: ~/.ssh/netology-ext-key
+vector:
+  hosts:
+    vector-01:
+      ansible_host: 178.154.193.134
+      ansible_user: centos
+      ansible_ssh_private_key_file: /home/vgorshkov/.ssh/netology-ext-key
+
