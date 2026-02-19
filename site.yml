@@ -1,4 +1,12 @@
 ---
+- name: Set hostnames for all servers
+  hosts: all
+  become: true
+  tasks:
+    - name: Set hostname based on inventory
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+      when: ansible_hostname != inventory_hostname
 - name: Install Clickhouse
   hosts: clickhouse
   handlers:
@@ -8,20 +16,20 @@
         name: clickhouse-server
         state: restarted
   tasks:
-    - name: Download Clickhouse packages  # добавил имя таски
+    - name: Download Clickhouse packages
       block:
         - name: Get clickhouse distrib
           ansible.builtin.get_url:
             url: "https://packages.clickhouse.com/rpm/stable/{{ item }}-{{ clickhouse_version }}.noarch.rpm"
             dest: "./{{ item }}-{{ clickhouse_version }}.rpm"
-            mode: '0644'  # добавил права
+            mode: '0644'
           with_items: "{{ clickhouse_packages }}"
       rescue:
-        - name: Get clickhouse distrib
+        - name: Get clickhouse distrib (fallback for common-static)
           ansible.builtin.get_url:
             url: "https://packages.clickhouse.com/rpm/stable/clickhouse-common-static-{{ clickhouse_version }}.x86_64.rpm"
             dest: "./clickhouse-common-static-{{ clickhouse_version }}.rpm"
-            mode: '0644'  # добавил права
+            mode: '0644'
     - name: Install clickhouse packages
       become: true
       ansible.builtin.yum:
@@ -30,8 +38,22 @@
           - clickhouse-client-{{ clickhouse_version }}.rpm
           - clickhouse-server-{{ clickhouse_version }}.rpm
       notify: Start clickhouse service
+    - name: Enable and start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: started
+        enabled: true
     - name: Flush handlers
       ansible.builtin.meta: flush_handlers
+    - name: Wait for clickhouse-server to start
+      ansible.builtin.wait_for:
+        port: 9000
+        host: localhost
+        delay: 5
+        timeout: 30
+      become: true
+
     - name: Create database
       ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
       register: create_db
@@ -53,7 +75,7 @@
       ansible.builtin.get_url:
         url: "https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-1.x86_64.rpm"
         dest: "/home/centos/vector-{{ vector_version }}.rpm"
-        mode: '0644' # добавил права
+        mode: '0644'
       register: download_result
     - name: Debug - show download result
       ansible.builtin.debug:
@@ -95,6 +117,64 @@
         name: "/home/centos/vector-{{ vector_version }}.rpm"
         state: present
       notify: Start vector service
-      when: file_stat.stat.exists  # Установка только если файл существует
+      when: file_stat.stat.exists
     - name: Flush handlers
       ansible.builtin.meta: flush_handlers
+
+- name: Install Lighthouse
+  hosts: lighthouse
+  become: true
+  vars_files:
+    - group_vars/lighthouse/vars.yml
+  handlers:
+    - name: Restart nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+        enabled: true
+  tasks:
+    - name: Install EPEL repository (for CentOS)
+      ansible.builtin.yum:
+        name: epel-release
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Download nginx RPM
+      ansible.builtin.get_url:
+        url: http://nginx.org/packages/centos/7/x86_64/RPMS/nginx-1.24.0-1.el7.ngx.x86_64.rpm
+        dest: /tmp/nginx.rpm
+        mode: '0644'
+      when: ansible_os_family == "RedHat"
+      register: nginx_download
+
+    - name: Install nginx from RPM
+      ansible.builtin.yum:
+        name: /tmp/nginx.rpm
+        state: present
+        disable_gpg_check: true
+      when:
+        - ansible_os_family == "RedHat"
+        - nginx_download is success
+
+    - name: Verify nginx installation
+      ansible.builtin.stat:
+        path: /usr/sbin/nginx
+      register: nginx_binary
+
+    - name: Fail if nginx not installed
+      ansible.builtin.fail:
+        msg: "Nginx was not installed successfully"
+      when: not nginx_binary.stat.exists
+
+    - name: Install git
+      ansible.builtin.yum:
+        name: git
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Start and enable nginx
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+      when: ansible_os_family == "RedHat"

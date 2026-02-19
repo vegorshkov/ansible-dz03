@@ -11,4 +11,9 @@ vector:
       ansible_host: 178.154.193.134
       ansible_user: centos
       ansible_ssh_private_key_file: /home/vgorshkov/.ssh/netology-ext-key
-
+lighthouse:
+  hosts:
+    lighthouse-01:
+      ansible_host: 178.154.195.114
+      ansible_user: centos
+      ansible_ssh_private_key_file: /home/vgorshkov/.ssh/netology-ext-key
